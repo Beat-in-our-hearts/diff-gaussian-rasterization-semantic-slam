@@ -162,6 +162,7 @@ CudaRasterizer::GeometryState CudaRasterizer::GeometryState::fromChunk(char*& ch
 	obtain(chunk, geom.cov3D, P * 6, 128);
 	obtain(chunk, geom.conic_opacity, P, 128);
 	obtain(chunk, geom.rgb, P * 3, 128);
+	obtain(chunk, geom.semantic_feature, P * NUM_SEMANTIC_CHANNELS, 128); // [NOTE Feat]
 	obtain(chunk, geom.tiles_touched, P, 128);
 	cub::DeviceScan::InclusiveSum(nullptr, geom.scan_size, geom.tiles_touched, geom.tiles_touched, P);
 	obtain(chunk, geom.scanning_space, geom.scan_size, 128);
@@ -205,6 +206,7 @@ int CudaRasterizer::Rasterizer::forward(
 	const float* means3D,
 	const float* shs,
 	const float* colors_precomp,
+	const float* semantic_feature, // [ADD Feat]
 	const float* opacities,
 	const float* scales,
 	const float scale_modifier,
@@ -216,7 +218,11 @@ int CudaRasterizer::Rasterizer::forward(
 	const float tan_fovx, float tan_fovy,
 	const bool prefiltered,
 	float* out_color,
+	float* out_depth, // [ADD SLAM]
+	float* out_feature_map, // [ADD Feat]
+	float* out_opacity, // [ADD SLAM]
 	int* radii,
+	int* n_touched, // [ADD SLAM]
 	bool debug)
 {
 	const float focal_y = height / (2.0f * tan_fovy);
@@ -326,11 +332,18 @@ int CudaRasterizer::Rasterizer::forward(
 		width, height,
 		geomState.means2D,
 		feature_ptr,
+		geomState.depths,  // [ADD SLAM]
+		semantic_feature,  // [ADD Feat]
 		geomState.conic_opacity,
 		imgState.accum_alpha,
 		imgState.n_contrib,
 		background,
-		out_color), debug)
+		out_color,
+		out_depth, // [ADD SLAM]
+		out_feature_map, // [ADD Feat]
+		out_opacity,// [ADD SLAM]
+		n_touched	// [ADD SLAM]
+		), debug)
 
 	return num_rendered;
 }
@@ -344,12 +357,14 @@ void CudaRasterizer::Rasterizer::backward(
 	const float* means3D,
 	const float* shs,
 	const float* colors_precomp,
+	const float* semantic_feature, // [ADD Feat]
 	const float* scales,
 	const float scale_modifier,
 	const float* rotations,
 	const float* cov3D_precomp,
 	const float* viewmatrix,
 	const float* projmatrix,
+	const float* projmatrix_raw, // [ADD SLAM]
 	const float* campos,
 	const float tan_fovx, float tan_fovy,
 	const int* radii,
@@ -357,15 +372,20 @@ void CudaRasterizer::Rasterizer::backward(
 	char* binning_buffer,
 	char* img_buffer,
 	const float* dL_dpix,
+	const float* dL_dpix_depth, // [ADD SLAM]
+	const float* dL_dpix_feature, // [ADD Feat]
 	float* dL_dmean2D,
 	float* dL_dconic,
 	float* dL_dopacity,
 	float* dL_dcolor,
+	float* dL_ddepth, // [ADD SLAM]
+	float* dL_dsemantic_feature,  //[ADD Feat]
 	float* dL_dmean3D,
 	float* dL_dcov3D,
 	float* dL_dsh,
 	float* dL_dscale,
 	float* dL_drot,
+	float* dL_dtau, // [ADD SLAM]
 	bool debug)
 {
 	GeometryState geomState = GeometryState::fromChunk(geom_buffer, P);
@@ -387,6 +407,10 @@ void CudaRasterizer::Rasterizer::backward(
 	// opacity and RGB of Gaussians from per-pixel loss gradients.
 	// If we were given precomputed colors and not SHs, use them.
 	const float* color_ptr = (colors_precomp != nullptr) ? colors_precomp : geomState.rgb;
+	const float* depth_ptr = geomState.depths; // [NOTE SLAM]
+	float* collected_semantic_feature; // [NOTE Feat] need malloc 
+	cudaMalloc((void**)&collected_semantic_feature, NUM_SEMANTIC_CHANNELS * BLOCK_SIZE * sizeof(float)); 
+
 	CHECK_CUDA(BACKWARD::render(
 		tile_grid,
 		block,
@@ -397,13 +421,24 @@ void CudaRasterizer::Rasterizer::backward(
 		geomState.means2D,
 		geomState.conic_opacity,
 		color_ptr,
+		depth_ptr, // [ADD SLAM]
+		semantic_feature, // [ADD Feat]
 		imgState.accum_alpha,
 		imgState.n_contrib,
 		dL_dpix,
+		dL_dpix_depth, // [ADD SLAM]
+		dL_dpix_feature, // [ADD Feat] [NOTE ]
 		(float3*)dL_dmean2D,
 		(float4*)dL_dconic,
 		dL_dopacity,
-		dL_dcolor), debug)
+		dL_dcolor,
+		dL_ddepth, // [ADD SLAM]
+		dL_dsemantic_feature, // [ADD Feat]
+		collected_semantic_feature // [ADD Feat]
+	), debug)
+
+	// free the semantic
+	cudaFree(collected_semantic_feature);
 
 	// Take care of the rest of preprocessing. Was the precomputed covariance
 	// given to us or a scales/rot pair? If precomputed, pass that. If not,
@@ -420,6 +455,7 @@ void CudaRasterizer::Rasterizer::backward(
 		cov3D_ptr,
 		viewmatrix,
 		projmatrix,
+		projmatrix_raw, 	// [ADD SLAM]
 		focal_x, focal_y,
 		tan_fovx, tan_fovy,
 		(glm::vec3*)campos,
@@ -427,8 +463,11 @@ void CudaRasterizer::Rasterizer::backward(
 		dL_dconic,
 		(glm::vec3*)dL_dmean3D,
 		dL_dcolor,
+		dL_ddepth, 			// [ADD SLAM]
 		dL_dcov3D,
 		dL_dsh,
 		(glm::vec3*)dL_dscale,
-		(glm::vec4*)dL_drot), debug)
+		(glm::vec4*)dL_drot,
+		dL_dtau 			// [ADD SLAM]
+	), debug)
 }

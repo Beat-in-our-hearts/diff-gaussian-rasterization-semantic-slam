@@ -38,6 +38,7 @@ namespace CudaRasterizer
 			const float* means3D,
 			const float* shs,
 			const float* colors_precomp,
+			const float* semantic_feature, // [ADD Feat]
 			const float* opacities,
 			const float* scales,
 			const float scale_modifier,
@@ -49,7 +50,11 @@ namespace CudaRasterizer
 			const float tan_fovx, float tan_fovy,
 			const bool prefiltered,
 			float* out_color,
+			float* out_depth, // [ADD SLAM]
+			float* out_feature_map, // [ADD Feat]
+			float* out_opacity,  // [ADD SLAM]
 			int* radii = nullptr,
+			int* n_touched = nullptr, // [ADD SLAM] 
 			bool debug = false);
 
 		static void backward(
@@ -59,12 +64,14 @@ namespace CudaRasterizer
 			const float* means3D,
 			const float* shs,
 			const float* colors_precomp,
+			const float* semantic_feature, // [ADD Feat]
 			const float* scales,
 			const float scale_modifier,
 			const float* rotations,
 			const float* cov3D_precomp,
 			const float* viewmatrix,
-			const float* projmatrix,
+			const float* projmatrix,	 // projmatrix for world coordinates
+			const float* projmatrix_raw, // projmatrix for camera coordinates [ADD SLAM]
 			const float* campos,
 			const float tan_fovx, float tan_fovy,
 			const int* radii,
@@ -72,15 +79,20 @@ namespace CudaRasterizer
 			char* binning_buffer,
 			char* image_buffer,
 			const float* dL_dpix,
+			const float* dL_dpix_depth, // [ADD SLAM] [ADD Feat] 
+			const float* dL_dpix_feature, // [ADD Feat]
 			float* dL_dmean2D,
 			float* dL_dconic,
 			float* dL_dopacity,
 			float* dL_dcolor,
+			float* dL_ddepths, // [ADD SLAM]
+			float* dL_dsemantic_feature,  //[ADD Feat]
 			float* dL_dmean3D,
 			float* dL_dcov3D,
 			float* dL_dsh,
 			float* dL_dscale,
 			float* dL_drot,
+			float* dL_dtau, // [ADD SLAM] 
 			bool debug);
 	};
 };

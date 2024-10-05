@@ -29,13 +29,21 @@ namespace BACKWARD
 		const float2* means2D,
 		const float4* conic_opacity,
 		const float* colors,
+		const float* depths,  				// [ADD SLAM Feat]
+		const float* semantic_feature, 		// [ADD Feat]
 		const float* final_Ts,
 		const uint32_t* n_contrib,
 		const float* dL_dpixels,
+		const float* dL_dpixels_depth,  	// [ADD SLAM Feat]
+		const float* dL_dpixels_feature, 	// [ADD Feat]
 		float3* dL_dmean2D,
 		float4* dL_dconic2D,
 		float* dL_dopacity,
-		float* dL_dcolors);
+		float* dL_dcolors,
+		float* dL_ddepths, 					// [ADD SLAM]
+		float* dL_dsemantic_feature, 		// [ADD Feat]
+		float* collected_semantic_feature 	// [ADD Feat]
+		);
 
 	void preprocess(
 		int P, int D, int M,
@@ -49,6 +57,7 @@ namespace BACKWARD
 		const float* cov3Ds,
 		const float* view,
 		const float* proj,
+		const float* proj_raw, 					// [ADD SLAM]
 		const float focal_x, float focal_y,
 		const float tan_fovx, float tan_fovy,
 		const glm::vec3* campos,
@@ -56,10 +65,13 @@ namespace BACKWARD
 		const float* dL_dconics,
 		glm::vec3* dL_dmeans,
 		float* dL_dcolor,
+		float* dL_ddepth, 						// [ADD SLAM]
 		float* dL_dcov3D,
 		float* dL_dsh,
 		glm::vec3* dL_dscale,
-		glm::vec4* dL_drot);
+		glm::vec4* dL_drot,
+		float* dL_dtau	 						// [ADD SLAM]
+		);
 }
 
 #endif

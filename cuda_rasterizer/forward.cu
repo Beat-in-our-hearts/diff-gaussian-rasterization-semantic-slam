@@ -266,11 +266,18 @@ renderCUDA(
 	int W, int H,
 	const float2* __restrict__ points_xy_image,
 	const float* __restrict__ features,
+	const float* __restrict__ depths, 			// [ADD SLAM]
+	const float* __restrict__ semantics,		// [ADD Feat]
 	const float4* __restrict__ conic_opacity,
 	float* __restrict__ final_T,
 	uint32_t* __restrict__ n_contrib,
 	const float* __restrict__ bg_color,
-	float* __restrict__ out_color)
+	float* __restrict__ out_color,
+	float* __restrict__ out_depth,				// [ADD SLAM]
+	float* __restrict__ out_feature_map,		// [ADD Feat]
+	float* __restrict__ out_opacity,			// [ADD SLAM]
+	int* __restrict__ n_touched					// [ADD SLAM]
+	)
 {
 	// Identify current tile and associated min/max pixel range.
 	auto block = cg::this_thread_block();
@@ -295,12 +302,17 @@ renderCUDA(
 	__shared__ int collected_id[BLOCK_SIZE];
 	__shared__ float2 collected_xy[BLOCK_SIZE];
 	__shared__ float4 collected_conic_opacity[BLOCK_SIZE];
+	/* __shared__ float collected_depth[BLOCK_SIZE]; // NOTE: collect depth for each point*/
 
 	// Initialize helper variables
 	float T = 1.0f;
 	uint32_t contributor = 0;
 	uint32_t last_contributor = 0;
 	float C[CHANNELS] = { 0 };
+	
+	// NOTE: add deptch and semantic feature
+	float D = 0.0f;							
+	float SF[NUM_SEMANTIC_CHANNELS] = { 0 };
 
 	// Iterate over batches until all done or range is complete
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
@@ -318,6 +330,7 @@ renderCUDA(
 			collected_id[block.thread_rank()] = coll_id;
 			collected_xy[block.thread_rank()] = points_xy_image[coll_id];
 			collected_conic_opacity[block.thread_rank()] = conic_opacity[coll_id];
+			/* collected_depth[block.thread_rank()] = depth[coll_id]; // init shared depth */
 		}
 		block.sync();
 
@@ -354,6 +367,17 @@ renderCUDA(
 			for (int ch = 0; ch < CHANNELS; ch++)
 				C[ch] += features[collected_id[j] * CHANNELS + ch] * alpha * T;
 
+			// NOTE: compute depth and semantic feature
+			/* D += collected_depth[j] * alpha * T; */
+			D += depths[collected_id[j]] * alpha * T;
+			for (int ch = 0; ch < NUM_SEMANTIC_CHANNELS; ch++){
+				SF[ch] += semantics[collected_id[j] * NUM_SEMANTIC_CHANNELS + ch] * alpha * T; 
+			}
+
+			// NOTE: Keep track of how many pixels touched this Gaussian.
+			if (test_T > 0.5f) 
+				atomicAdd(&(n_touched[collected_id[j]]), 1);
+
 			T = test_T;
 
 			// Keep track of last range entry to update this
@@ -368,8 +392,13 @@ renderCUDA(
 	{
 		final_T[pix_id] = T;
 		n_contrib[pix_id] = last_contributor;
-		for (int ch = 0; ch < CHANNELS; ch++)
+		for (int ch = 0; ch < CHANNELS; ch++) // RGB Image
 			out_color[ch * H * W + pix_id] = C[ch] + T * bg_color[ch];
+		// Wirte out depth, semantic feature, out_opacity
+		out_depth[pix_id] = D; // do not add bg_color
+		out_opacity[pix_id] = 1 - T;
+		for (int ch = 0; ch < NUM_SEMANTIC_CHANNELS; ch++)                 
+			out_feature_map[ch * H * W + pix_id] = SF[ch] + T * bg_color[ch]; // NOTE: bg_color to draw in screen
 	}
 }
 
@@ -380,11 +409,18 @@ void FORWARD::render(
 	int W, int H,
 	const float2* means2D,
 	const float* colors,
+	const float* depths,  				// [ADD SLAM]
+	const float* semantic_feature,  	// [ADD Feat]
 	const float4* conic_opacity,
 	float* final_T,
 	uint32_t* n_contrib,
 	const float* bg_color,
-	float* out_color)
+	float* out_color,
+	float* out_depth,					// [ADD SLAM]
+	float* out_feature_map,				// [ADD Feat]
+	float* out_opacity,					// [ADD SLAM]
+	int* n_touched						// [ADD SLAM]
+	)
 {
 	renderCUDA<NUM_CHANNELS> << <grid, block >> > (
 		ranges,
@@ -392,11 +428,19 @@ void FORWARD::render(
 		W, H,
 		means2D,
 		colors,
+		depths,							// [ADD SLAM]
+		semantic_feature,				// [ADD Feat]
 		conic_opacity,
 		final_T,
 		n_contrib,
 		bg_color,
-		out_color);
+		out_color,
+		out_depth, 						// [ADD SLAM]
+		out_feature_map,				// [ADD Feat]
+		out_opacity,					// [ADD SLAM]	
+		n_touched						// [ADD SLAM]
+
+	);
 }
 
 void FORWARD::preprocess(int P, int D, int M,

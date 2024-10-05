@@ -54,13 +54,18 @@ namespace FORWARD
 		const uint32_t* point_list,
 		int W, int H,
 		const float2* points_xy_image,
-		const float* features,
+		const float* features, 	// colors
+		const float* depths, 			// [ADD SLAM]
+		const float* semantic_feature, 	// [ADD Feat]
 		const float4* conic_opacity,
 		float* final_T,
 		uint32_t* n_contrib,
 		const float* bg_color,
-		float* out_color);
+		float* out_color,
+	    float* out_depth, 				// [ADD SLAM]
+		float* out_feature_map, 		// [ADD Feat]
+		float* out_opacity, 			// [ADD SLAM]
+		int* n_touched 					// [ADD SLAM]
+		);
 }
-
-
 #endif
