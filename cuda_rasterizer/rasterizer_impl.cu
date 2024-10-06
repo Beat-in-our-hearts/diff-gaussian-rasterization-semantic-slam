@@ -371,9 +371,9 @@ void CudaRasterizer::Rasterizer::backward(
 	char* geom_buffer,
 	char* binning_buffer,
 	char* img_buffer,
-	const float* dL_dpix,
-	const float* dL_dpix_depth, // [ADD SLAM]
-	const float* dL_dpix_feature, // [ADD Feat]
+	const float* dL_dpix, 			// the gradient of the rendered image: dL / dI
+	const float* dL_dpix_depth, 	// [ADD SLAM] the gradient of the rendered depth: dL / dD
+	const float* dL_dpix_feature, 	// [ADD Feat] the gradient of the rendered feature: dL / dF
 	float* dL_dmean2D,
 	float* dL_dconic,
 	float* dL_dopacity,
