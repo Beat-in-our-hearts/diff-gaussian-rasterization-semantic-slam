@@ -164,11 +164,11 @@ class _RasterizeGaussians(torch.autograd.Function):
             grad_means2D,
             grad_sh,
             grad_colors_precomp,
+            grad_semantic_feature, # [ADD Feat]
             grad_opacities,
             grad_scales,
             grad_rotations,
             grad_cov3Ds_precomp,
-            grad_semantic_feature,
             grad_theta,
             grad_rho,
             None,
