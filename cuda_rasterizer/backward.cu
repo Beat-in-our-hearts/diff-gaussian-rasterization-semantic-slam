@@ -277,10 +277,10 @@ __global__ void computeCov2DCUDA(int P,
 	//
 	//
 	///////////////////////////////////////////////////////////////////////////////////////////////
-	SE3 T_CW(view_matrix);
-	mat33 R = T_CW.R().data();
-	mat33 RT = R.transpose();
-	float3 t_ = T_CW.t();
+	// SE3 T_CW(view_matrix);
+	// mat33 R = T_CW.R().data();
+	// mat33 RT = R.transpose();
+	// float3 t_ = T_CW.t();
 	mat33 dpC_drho = mat33::identity();
 	mat33 dpC_dtheta = -mat33::skew_symmetric(t);
 	for (int i = 0; i < 3; i++) {
@@ -497,7 +497,7 @@ __global__ void preprocessCUDA(
 	//                 0 b 0 0
 	//                 f g c d=1
 	//                 0 0 e 0] this is Perspective projection transformation matrix for DirectX, OpenGL
-	// m_hom = [a*p_C.x  b*p_C.y  f*p_C.x +g*p_C.y+c*p_C+d  e*p_C.z]
+	// m_hom = [a*p_C.x  b*p_C.y  f*p_C.x +g*p_C.y+c*p_C.z+d  e*p_C.z]
 	// for pos in image, u = a*p_C.x / e*p_C.z , v = b*p_C.y / e*p_C.z
 	//     for u, [du/dx,du/dy,du/dz] = [a/e*p_C.z, 0, -a*p_C.x/(e*p_C.z^2)]
 	//////////////////////////////////////////////////////////////////////////////////////////////
