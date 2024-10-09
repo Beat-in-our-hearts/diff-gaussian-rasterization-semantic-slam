@@ -303,7 +303,7 @@ __global__ void computeCov2DCUDA(int P,
 	// formulate from paper
 	//
 	//
-	//
+	// dL/dtau = dl/dw * dw/dtheta
 	///////////////////////////////////////////////////////////////////////////////////////////////
 	float dL_dW00 = J[0][0] * dL_dT00;
 	float dL_dW01 = J[0][0] * dL_dT01;
@@ -315,9 +315,9 @@ __global__ void computeCov2DCUDA(int P,
 	float dL_dW21 = J[0][2] * dL_dT01 + J[1][2] * dL_dT11;
 	float dL_dW22 = J[0][2] * dL_dT02 + J[1][2] * dL_dT12;
 
-	float3 c1 = R.cols[0];
-	float3 c2 = R.cols[1];
-	float3 c3 = R.cols[2];
+	float3 c1 = make_float3(view_matrix[0], view_matrix[1], view_matrix[2]);
+	float3 c2 = make_float3(view_matrix[4], view_matrix[5], view_matrix[6]);
+	float3 c3 = make_float3(view_matrix[8], view_matrix[9], view_matrix[10]);
 
 	float dL_dW_data[9];
 	dL_dW_data[0] = dL_dW00;

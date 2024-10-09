@@ -4,8 +4,15 @@ Used as the rasterization engine for the paper "3D Gaussian Splatting for Real-T
 
 # Render Depth image and feature map
 
+a depth image buffer and a feature buffer were created just like the RGB image.
 
 # Gradient for camera pos and rot $T_{Cw}$
+
+for camera pos: 
+
+# Gradient for Depth image and feature map
+
+
 
 <section class="section" id="BibTeX">
   <div class="container is-max-desktop content">
