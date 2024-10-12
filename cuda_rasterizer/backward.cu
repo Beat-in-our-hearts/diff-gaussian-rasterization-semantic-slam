@@ -555,7 +555,7 @@ __global__ void preprocessCUDA(
 		dL_dtau[6 * idx + i] += dL_dpCz * c_rho.z;
 		dL_dtau[6 * idx + i + 3] += dL_dpCz * c_theta.z;
 	}
-
+	
 	///////////////////////////////////////////////////////////////////////////////////////////////
 	// Compute gradient update due to computing depths
 	// p_orig = m
