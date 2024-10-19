@@ -87,6 +87,7 @@ class _RasterizeGaussians(torch.autograd.Function):
             raster_settings.sh_degree,
             raster_settings.campos,
             raster_settings.prefiltered,
+            raster_settings.flag_semantic,
             raster_settings.debug
         )
 
@@ -189,6 +190,7 @@ class GaussianRasterizationSettings(NamedTuple):
     sh_degree : int
     campos : torch.Tensor
     prefiltered : bool
+    flag_semantic: bool
     debug : bool
 
 class GaussianRasterizer(nn.Module):

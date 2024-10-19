@@ -55,6 +55,7 @@ namespace CudaRasterizer
 			float* out_opacity,  // [ADD SLAM]
 			int* radii = nullptr,
 			int* n_touched = nullptr, // [ADD SLAM] 
+			bool flag_semantic = false, // [ADD Feat]
 			bool debug = false);
 
 		static void backward(

@@ -54,6 +54,7 @@ RasterizeGaussiansCUDA(
 	const int degree,
 	const torch::Tensor& campos,
 	const bool prefiltered,
+	const bool flag_semantic, 				// ADD Feat
 	const bool debug)
 {
   if (means3D.ndimension() != 2 || means3D.size(1) != 3) {
@@ -122,6 +123,7 @@ RasterizeGaussiansCUDA(
 		out_opaticy.contiguous().data<float>(),			// ADD SLAM
 		radii.contiguous().data<int>(),
 		n_touched.contiguous().data<int>(),				// ADD SLAM
+		flag_semantic,    								// ADD Feat
 		debug);
   }
   return std::make_tuple(rendered, out_color, radii, geomBuffer, binningBuffer, imgBuffer, out_depth, out_feature_map, out_opaticy, n_touched);

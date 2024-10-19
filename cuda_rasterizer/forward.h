@@ -65,7 +65,8 @@ namespace FORWARD
 	    float* out_depth, 				// [ADD SLAM]
 		float* out_feature_map, 		// [ADD Feat]
 		float* out_opacity, 			// [ADD SLAM]
-		int* n_touched 					// [ADD SLAM]
+		int* n_touched,					// [ADD SLAM]
+		bool flag_semantic				// [ADD Feat]
 		);
 }
 #endif

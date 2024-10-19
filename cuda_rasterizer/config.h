@@ -16,6 +16,6 @@
 #define BLOCK_X 16
 #define BLOCK_Y 16
 
-#define NUM_SEMANTIC_CHANNELS 8 //256 // Subject to change [ADD Feat]
+#define NUM_SEMANTIC_CHANNELS 128 //256 // Subject to change [ADD Feat]
 
 #endif

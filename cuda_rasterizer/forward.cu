@@ -276,7 +276,8 @@ renderCUDA(
 	float* __restrict__ out_depth,				// [ADD SLAM]
 	float* __restrict__ out_feature_map,		// [ADD Feat]
 	float* __restrict__ out_opacity,			// [ADD SLAM]
-	int* __restrict__ n_touched					// [ADD SLAM]
+	int* __restrict__ n_touched,				// [ADD SLAM]
+	bool __restrict__ flag_semantic				// [ADD Feat]
 	)
 {
 	// Identify current tile and associated min/max pixel range.
@@ -370,8 +371,11 @@ renderCUDA(
 			// NOTE: compute depth and semantic feature
 			/* D += collected_depth[j] * alpha * T; */
 			D += depths[collected_id[j]] * alpha * T;
-			for (int ch = 0; ch < NUM_SEMANTIC_CHANNELS; ch++){
-				SF[ch] += semantics[collected_id[j] * NUM_SEMANTIC_CHANNELS + ch] * alpha * T; 
+
+			if(flag_semantic){
+				for (int ch = 0; ch < NUM_SEMANTIC_CHANNELS; ch++){
+					SF[ch] += semantics[collected_id[j] * NUM_SEMANTIC_CHANNELS + ch] * alpha * T; 
+				}
 			}
 
 			// NOTE: Keep track of how many pixels touched this Gaussian.
@@ -397,8 +401,10 @@ renderCUDA(
 		// Wirte out depth, semantic feature, out_opacity
 		out_depth[pix_id] = D; // do not add bg_color
 		out_opacity[pix_id] = 1 - T;
-		for (int ch = 0; ch < NUM_SEMANTIC_CHANNELS; ch++)                 
-			out_feature_map[ch * H * W + pix_id] = SF[ch] + T * bg_color[ch]; // NOTE: bg_color to draw in screen
+		if(flag_semantic){
+			for (int ch = 0; ch < NUM_SEMANTIC_CHANNELS; ch++)                 
+				out_feature_map[ch * H * W + pix_id] = SF[ch] + T * bg_color[ch]; // NOTE: bg_color to draw in screen
+		}
 	}
 }
 
@@ -419,7 +425,8 @@ void FORWARD::render(
 	float* out_depth,					// [ADD SLAM]
 	float* out_feature_map,				// [ADD Feat]
 	float* out_opacity,					// [ADD SLAM]
-	int* n_touched						// [ADD SLAM]
+	int* n_touched,						// [ADD SLAM]
+	bool flag_semantic					// [ADD Feat]
 	)
 {
 	renderCUDA<NUM_CHANNELS> << <grid, block >> > (
@@ -438,8 +445,8 @@ void FORWARD::render(
 		out_depth, 						// [ADD SLAM]
 		out_feature_map,				// [ADD Feat]
 		out_opacity,					// [ADD SLAM]	
-		n_touched						// [ADD SLAM]
-
+		n_touched,						// [ADD SLAM]
+		flag_semantic					// [ADD Feat]
 	);
 }
 

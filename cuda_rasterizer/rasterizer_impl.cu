@@ -223,6 +223,7 @@ int CudaRasterizer::Rasterizer::forward(
 	float* out_opacity, // [ADD SLAM]
 	int* radii,
 	int* n_touched, // [ADD SLAM]
+	bool flag_semantic, // [ADD Feat]
 	bool debug)
 {
 	const float focal_y = height / (2.0f * tan_fovy);
@@ -342,7 +343,8 @@ int CudaRasterizer::Rasterizer::forward(
 		out_depth, // [ADD SLAM]
 		out_feature_map, // [ADD Feat]
 		out_opacity,// [ADD SLAM]
-		n_touched	// [ADD SLAM]
+		n_touched,	// [ADD SLAM]
+		flag_semantic
 		), debug)
 
 	return num_rendered;
@@ -378,8 +380,8 @@ void CudaRasterizer::Rasterizer::backward(
 	float* dL_dconic,
 	float* dL_dopacity,
 	float* dL_dcolor,
-	float* dL_ddepth, // [ADD SLAM]
-	float* dL_dsemantic_feature,  //[ADD Feat]
+	float* dL_ddepth, 				// [ADD SLAM]
+	float* dL_dsemantic_feature,  	//[ADD Feat]
 	float* dL_dmean3D,
 	float* dL_dcov3D,
 	float* dL_dsh,
