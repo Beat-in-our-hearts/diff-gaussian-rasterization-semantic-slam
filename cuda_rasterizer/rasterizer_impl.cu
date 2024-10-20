@@ -381,13 +381,14 @@ void CudaRasterizer::Rasterizer::backward(
 	float* dL_dopacity,
 	float* dL_dcolor,
 	float* dL_ddepth, 				// [ADD SLAM]
-	float* dL_dsemantic_feature,  	//[ADD Feat]
+	float* dL_dsemantic_feature,  	// [ADD Feat]
 	float* dL_dmean3D,
 	float* dL_dcov3D,
 	float* dL_dsh,
 	float* dL_dscale,
 	float* dL_drot,
-	float* dL_dtau, // [ADD SLAM]
+	float* dL_dtau, 				// [ADD SLAM]
+	bool flag_semantic, 			// [ADD Feat]
 	bool debug)
 {
 	GeometryState geomState = GeometryState::fromChunk(geom_buffer, P);
@@ -436,7 +437,8 @@ void CudaRasterizer::Rasterizer::backward(
 		dL_dcolor,
 		dL_ddepth, // [ADD SLAM]
 		dL_dsemantic_feature, // [ADD Feat]
-		collected_semantic_feature // [ADD Feat]
+		collected_semantic_feature, // [ADD Feat]
+		flag_semantic
 	), debug)
 
 	// free the semantic

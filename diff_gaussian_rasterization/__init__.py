@@ -78,7 +78,7 @@ class _RasterizeGaussians(torch.autograd.Function):
             cov3Ds_precomp,
             raster_settings.viewmatrix,
             raster_settings.projmatrix,
-            raster_settings.projmatrix_raw, # ADD Feat
+            raster_settings.projmatrix_raw, # [ADD Feat]
             raster_settings.tanfovx,
             raster_settings.tanfovy,
             raster_settings.image_height,
@@ -87,7 +87,7 @@ class _RasterizeGaussians(torch.autograd.Function):
             raster_settings.sh_degree,
             raster_settings.campos,
             raster_settings.prefiltered,
-            raster_settings.flag_semantic,
+            raster_settings.flag_semantic,  # [ADD Feat]
             raster_settings.debug
         )
 
@@ -142,6 +142,7 @@ class _RasterizeGaussians(torch.autograd.Function):
                 num_rendered,
                 binningBuffer,
                 imgBuffer,
+                raster_settings.flag_semantic,      # [ADD Feat]
                 raster_settings.debug)
 
         # Compute gradients for relevant tensors by invoking backward method

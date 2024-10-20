@@ -277,7 +277,7 @@ renderCUDA(
 	float* __restrict__ out_feature_map,		// [ADD Feat]
 	float* __restrict__ out_opacity,			// [ADD SLAM]
 	int* __restrict__ n_touched,				// [ADD SLAM]
-	bool __restrict__ flag_semantic				// [ADD Feat]
+	bool flag_semantic							// [ADD Feat]
 	)
 {
 	// Identify current tile and associated min/max pixel range.

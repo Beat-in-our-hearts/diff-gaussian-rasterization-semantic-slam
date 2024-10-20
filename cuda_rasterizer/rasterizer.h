@@ -80,20 +80,21 @@ namespace CudaRasterizer
 			char* binning_buffer,
 			char* image_buffer,
 			const float* dL_dpix,
-			const float* dL_dpix_depth, // [ADD SLAM] [ADD Feat] 
-			const float* dL_dpix_feature, // [ADD Feat]
+			const float* dL_dpix_depth, 	// [ADD SLAM] [ADD Feat] 
+			const float* dL_dpix_feature, 	// [ADD Feat]
 			float* dL_dmean2D,
 			float* dL_dconic,
 			float* dL_dopacity,
 			float* dL_dcolor,
-			float* dL_ddepths, // [ADD SLAM]
-			float* dL_dsemantic_feature,  //[ADD Feat]
+			float* dL_ddepths, 				// [ADD SLAM]
+			float* dL_dsemantic_feature,  	// [ADD Feat]
 			float* dL_dmean3D,
 			float* dL_dcov3D,
 			float* dL_dsh,
 			float* dL_dscale,
 			float* dL_drot,
-			float* dL_dtau, // [ADD SLAM] 
+			float* dL_dtau, 				// [ADD SLAM] 
+			bool flag_semantic, 			// [ADD Feat]
 			bool debug);
 	};
 };

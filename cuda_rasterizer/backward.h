@@ -42,7 +42,8 @@ namespace BACKWARD
 		float* dL_dcolors,
 		float* dL_ddepths, 					// [ADD SLAM]
 		float* dL_dsemantic_feature, 		// [ADD Feat]
-		float* collected_semantic_feature 	// [ADD Feat]
+		float* collected_semantic_feature, 	// [ADD Feat]
+		bool flag_semantic 					// [ADD Feat]
 		);
 
 	void preprocess(

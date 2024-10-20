@@ -155,6 +155,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
 	const int R,
 	const torch::Tensor& binningBuffer,
 	const torch::Tensor& imageBuffer,
+	const bool flag_semantic, 				// [ADD Feat]
 	const bool debug) 
 {
   const int P = means3D.size(0);
@@ -220,6 +221,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
 	  dL_dscales.contiguous().data<float>(),
 	  dL_drotations.contiguous().data<float>(),
 	  dL_dtau.contiguous().data<float>(),				// ADD SLAM
+	  flag_semantic, 									// ADD Feat
 	  debug);
   }
 
