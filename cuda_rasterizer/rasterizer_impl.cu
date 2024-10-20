@@ -411,8 +411,8 @@ void CudaRasterizer::Rasterizer::backward(
 	// If we were given precomputed colors and not SHs, use them.
 	const float* color_ptr = (colors_precomp != nullptr) ? colors_precomp : geomState.rgb;
 	const float* depth_ptr = geomState.depths; // [NOTE SLAM]
-	float* collected_semantic_feature; // [NOTE Feat] need malloc 
-	cudaMalloc((void**)&collected_semantic_feature, NUM_SEMANTIC_CHANNELS * BLOCK_SIZE * sizeof(float)); 
+	// float* collected_semantic_feature; // [NOTE Feat] need malloc 
+	// cudaMalloc((void**)&collected_semantic_feature, NUM_SEMANTIC_CHANNELS * BLOCK_SIZE * sizeof(float)); 
 
 	CHECK_CUDA(BACKWARD::render(
 		tile_grid,
@@ -437,12 +437,12 @@ void CudaRasterizer::Rasterizer::backward(
 		dL_dcolor,
 		dL_ddepth, // [ADD SLAM]
 		dL_dsemantic_feature, // [ADD Feat]
-		collected_semantic_feature, // [ADD Feat]
+		// collected_semantic_feature, // [ADD Feat]
 		flag_semantic
 	), debug)
 
 	// free the semantic
-	cudaFree(collected_semantic_feature);
+	// cudaFree(collected_semantic_feature);
 
 	// Take care of the rest of preprocessing. Was the precomputed covariance
 	// given to us or a scales/rot pair? If precomputed, pass that. If not,

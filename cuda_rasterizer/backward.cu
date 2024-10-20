@@ -581,6 +581,47 @@ __global__ void preprocessCUDA(
 		computeCov3D(idx, scales[idx], scale_modifier, rotations[idx], dL_dcov3D, dL_dscale, dL_drot);
 }
 
+template <typename T>
+__device__ void inline reduce_helper(int lane, int i, T *data) {
+  if (lane < i) {
+    data[lane] += data[lane + i];
+  }
+}
+
+template <typename group_t, typename... Lists>
+__device__ void render_cuda_reduce_sum(group_t g, Lists... lists) {
+  int lane = g.thread_rank();
+  g.sync();
+
+  for (int i = g.size() / 2; i > 0; i /= 2) {
+    (...,
+     reduce_helper(lane, i, lists)); // Fold expression: apply reduce_helper for each list
+    g.sync();
+  }
+}
+
+// template <typename T>
+// __device__ void inline reduce_helper_1d(int lane, int i, T *data) {
+//   if (lane < i) {
+// 	#pragma unroll
+// 	for (int ch = 0; ch < NUM_SEMANTIC_CHANNELS; ++ch) {
+//     	data[lane * NUM_SEMANTIC_CHANNELS + ch] += data[(lane + i) * NUM_SEMANTIC_CHANNELS + ch];
+// 	}
+//   }
+// }
+
+// template <typename group_t, typename... Lists>
+// __device__ void render_cuda_reduce_sum_1d(group_t g, Lists... lists) {
+//   int lane = g.thread_rank();
+//   g.sync();
+
+//   for (int i = g.size() / 2; i > 0; i /= 2) {
+//     (...,
+//      reduce_helper_1d(lane, i, lists)); // Fold expression: apply reduce_helper for each list
+//     g.sync();
+//   }
+// }
+
 // Backward version of the rendering procedure.
 template <uint32_t C>
 __global__ void __launch_bounds__(BLOCK_X * BLOCK_Y)
@@ -605,12 +646,14 @@ renderCUDA(
 	float* __restrict__ dL_dcolors,
 	float* __restrict__ dL_ddepths,					// [ADD SLAM]
 	float* __restrict__ dL_dsemantic_feature,		// [ADD Feat]
-	float*  collected_semantic_feature,				// [ADD Feat]
+	// float*  collected_semantic_feature,			// [ADD Feat]
 	bool flag_semantic								// [ADD Feat]
 	)
 {
 	// We rasterize again. Compute necessary block info.
 	auto block = cg::this_thread_block();
+	auto tid = block.thread_rank(); // speedup 
+
 	const uint32_t horizontal_blocks = (W + BLOCK_X - 1) / BLOCK_X;
 	const uint2 pix_min = { block.group_index().x * BLOCK_X, block.group_index().y * BLOCK_Y };
 	const uint2 pix_max = { min(pix_min.x + BLOCK_X, W), min(pix_min.y + BLOCK_Y , H) };
@@ -632,6 +675,17 @@ renderCUDA(
 	__shared__ float collected_colors[C * BLOCK_SIZE];
 	__shared__ float collected_depths[BLOCK_SIZE];
 
+	// NOTE: speedup for atomicAdd
+	__shared__ float2 dL_dmean2D_shared[BLOCK_SIZE];
+	__shared__ float3 dL_dcolors_shared[BLOCK_SIZE];
+	__shared__ float dL_ddepths_shared[BLOCK_SIZE];
+	__shared__ float dL_dopacity_shared[BLOCK_SIZE];
+	__shared__ float4 dL_dconic2D_shared[BLOCK_SIZE];
+
+	// NOTE: speedup for semantic feature
+	// but uses too much shared data (0x25804 bytes, 0xc000 max)
+	// __shared__ float dL_dsemantic_feature_shared[BLOCK_SIZE*NUM_SEMANTIC_CHANNELS];
+
 	// In the forward, we stored the final value for T, the
 	// product of all (1 - alpha) factors. 
 	const float T_final = inside ? final_Ts[pix_id] : 0;
@@ -646,18 +700,24 @@ renderCUDA(
 	float dL_dpixel[C];
 	// add semantic feature and depth
 	float accum_semantic_feature_rec[NUM_SEMANTIC_CHANNELS] = { 0 }; 
-	float accum_depth_rec = 0;
 	float dL_dpix_feature[NUM_SEMANTIC_CHANNELS];
+	
+	float accum_depth_rec = 0;
 	float dL_dpix_depth;
 
 	if (inside)
 	{
+		#pragma unroll // speedup
 		for (int i = 0; i < C; i++)
 			dL_dpixel[i] = dL_dpixels[i * H * W + pix_id];
 		
 		dL_dpix_depth = dL_dpixels_depth[pix_id];
-		for (int i = 0; i < NUM_SEMANTIC_CHANNELS; i++) 
-			dL_dpix_feature[i] = dL_dpixels_feature[i * H * W + pix_id];
+
+		if(flag_semantic){
+			#pragma unroll // speedup
+			for (int i = 0; i < NUM_SEMANTIC_CHANNELS; i++) 
+				dL_dpix_feature[i] = dL_dpixels_feature[i * H * W + pix_id];
+		}
 	}
 	float last_alpha = 0;
 	float last_color[C] = { 0 };
@@ -669,48 +729,70 @@ renderCUDA(
 	const float ddelx_dx = 0.5 * W;
 	const float ddely_dy = 0.5 * H;
 
+	// NOTE
+	__shared__ int skip_counter;
+
 	// Traverse all Gaussians
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
 	{
 		// Load auxiliary data into shared memory, start in the BACK
 		// and load them in revers order.
-		block.sync();
-		const int progress = i * BLOCK_SIZE + block.thread_rank();
+		// block.sync();
+		const int progress = i * BLOCK_SIZE + tid;
 		if (range.x + progress < range.y)
 		{
 			const int coll_id = point_list[range.y - progress - 1];
-			collected_id[block.thread_rank()] = coll_id;
-			collected_xy[block.thread_rank()] = points_xy_image[coll_id];
-			collected_conic_opacity[block.thread_rank()] = conic_opacity[coll_id];
+			collected_id[tid] = coll_id;
+			collected_xy[tid] = points_xy_image[coll_id];
+			collected_conic_opacity[tid] = conic_opacity[coll_id];
+			#pragma unroll // speedup
 			for (int i = 0; i < C; i++)
-				collected_colors[i * BLOCK_SIZE + block.thread_rank()] = colors[coll_id * C + i];
-			collected_depths[block.thread_rank()] = depths[coll_id];
+				collected_colors[i * BLOCK_SIZE + tid] = colors[coll_id * C + i];
+			collected_depths[tid] = depths[coll_id];
 		}
-		block.sync();
+		// block.sync();
 
 		// Iterate over Gaussians
-		for (int j = 0; !done && j < min(BLOCK_SIZE, toDo); j++)
+		// for (int j = 0; !done && j < min(BLOCK_SIZE, toDo); j++)
+		for (int j = 0; j < min(BLOCK_SIZE, toDo); j++)
 		{
+			block.sync();
+			if (tid == 0) skip_counter = 0;
+			block.sync();
+
 			// Keep track of current Gaussian ID. Skip, if this one
 			// is behind the last contributor for this pixel.
-			contributor--;
-			if (contributor >= last_contributor)
-				continue;
+			bool skip = done; // it means ..
+			contributor = done ? contributor : contributor - 1; // contributor--;
+			
+			// if (contributor >= last_contributor)
+			// 	continue;
+			skip |= contributor >= last_contributor;
 
 			// Compute blending values, as before.
 			const float2 xy = collected_xy[j];
 			const float2 d = { xy.x - pixf.x, xy.y - pixf.y };
 			const float4 con_o = collected_conic_opacity[j];
 			const float power = -0.5f * (con_o.x * d.x * d.x + con_o.z * d.y * d.y) - con_o.y * d.x * d.y;
-			if (power > 0.0f)
-				continue;
+			
+			// if (power > 0.0f)
+			// 	continue;
+			skip |= power > 0.0f;
 
 			const float G = exp(power);
 			const float alpha = min(0.99f, con_o.w * G);
-			if (alpha < 1.0f / 255.0f)
-				continue;
 
-			T = T / (1.f - alpha);
+			// if (alpha < 1.0f / 255.0f)
+			// 	continue;
+			skip |= alpha < 1.0f / 255.0f;
+
+			// add skip_counter
+			if (skip) atomicAdd(&skip_counter, 1);
+			block.sync();
+			if (skip_counter == BLOCK_SIZE) continue;
+			
+			// T = T / (1.f - alpha);
+			T = skip ? T : T / (1.f - alpha);
 			const float dchannel_dcolor = alpha * T;
 			const float dchannel_dsemantic_feature = alpha * T; 
 
@@ -719,34 +801,43 @@ renderCUDA(
 			// pair).
 			float dL_dalpha = 0.0f;
 			const int global_id = collected_id[j];
+			
+			float temp_dL_dcolors[C];
+			#pragma unroll // speedup
 			for (int ch = 0; ch < C; ch++)
 			{
 				const float c = collected_colors[ch * BLOCK_SIZE + j];
 				// Update last color (to be used in the next iteration)
-				accum_rec[ch] = last_alpha * last_color[ch] + (1.f - last_alpha) * accum_rec[ch];
-				last_color[ch] = c;
+				accum_rec[ch] = skip ? accum_rec[ch] : last_alpha * last_color[ch] + (1.f - last_alpha) * accum_rec[ch];
+				last_color[ch] = skip ? last_color[ch] : c;
 
 				const float dL_dchannel = dL_dpixel[ch];
 				dL_dalpha += (c - accum_rec[ch]) * dL_dchannel;
 				// Update the gradients w.r.t. color of the Gaussian. 
 				// Atomic, since this pixel is just one of potentially
 				// many that were affected by this Gaussian.
-				atomicAdd(&(dL_dcolors[global_id * C + ch]), dchannel_dcolor * dL_dchannel);
+				// atomicAdd(&(dL_dcolors[global_id * C + ch]), dchannel_dcolor * dL_dchannel);
+				temp_dL_dcolors[ch] = skip ? 0.0f : dchannel_dcolor * dL_dchannel;
 			}
+			dL_dcolors_shared[tid].x = temp_dL_dcolors[0];
+			dL_dcolors_shared[tid].y = temp_dL_dcolors[1];
+			dL_dcolors_shared[tid].z = temp_dL_dcolors[2];
 
 			const float c_d = collected_depths[j];
-			accum_depth_rec = last_alpha * last_depth + (1.f - last_alpha) * accum_depth_rec;
-			last_depth = c_d;
+			accum_depth_rec = skip ? accum_depth_rec : last_alpha * last_depth + (1.f - last_alpha) * accum_depth_rec;
+			last_depth = skip ? last_depth : c_d;
 			dL_dalpha += (c_d - accum_depth_rec) * dL_dpix_depth;
-			atomicAdd(&(dL_ddepths[global_id]), dchannel_dcolor * dL_dpix_depth);
+			// atomicAdd(&(dL_ddepths[global_id]), dchannel_dcolor * dL_dpix_depth);
+			dL_ddepths_shared[tid] = skip ? 0.f : dchannel_dcolor * dL_dpix_depth;
 
 			if(flag_semantic){
+				#pragma unroll // speedup
 				for (int ch = 0; ch < NUM_SEMANTIC_CHANNELS; ch++) 
 				{
-					const float f = collected_semantic_feature[ch * BLOCK_SIZE + j];
-					// Update last semantic feature (to be used in the next iteration)
-					accum_semantic_feature_rec[ch] = last_alpha * last_semantic_feature[ch] + (1.f - last_alpha) * accum_semantic_feature_rec[ch];
-					last_semantic_feature[ch] = f;
+					// const float f = collected_semantic_feature[ch * BLOCK_SIZE + j];
+					// // Update last semantic feature (to be used in the next iteration)
+					// accum_semantic_feature_rec[ch] = skip ? accum_semantic_feature_rec[ch] : last_alpha * last_semantic_feature[ch] + (1.f - last_alpha) * accum_semantic_feature_rec[ch];
+					// last_semantic_feature[ch] = skip ? last_semantic_feature[ch] : f;
 
 					const float dL_dfeaturechannel = dL_dpix_feature[ch];
 					/**************************************************************************************************/
@@ -756,17 +847,23 @@ renderCUDA(
 					// Update the gradients w.r.t. semnatic feature of the Gaussian. 
 					// Atomic, since this pixel is just one of potentially
 					// many that were affected by this Gaussian.
-					atomicAdd(&(dL_dsemantic_feature[global_id * NUM_SEMANTIC_CHANNELS + ch]), dchannel_dsemantic_feature * dL_dfeaturechannel); 
-				}	
+
+					if(!skip)
+						atomicAdd(&(dL_dsemantic_feature[global_id * NUM_SEMANTIC_CHANNELS + ch]), dchannel_dsemantic_feature * dL_dfeaturechannel); 
+					
+					// dL_dsemantic_feature_shared[tid * NUM_SEMANTIC_CHANNELS + ch] = skip ? 0.f : dchannel_dsemantic_feature * dL_dfeaturechannel;
+				}
 			}	
 
 			dL_dalpha *= T;
 			// Update last alpha (to be used in the next iteration)
-			last_alpha = alpha;
+			// last_alpha = alpha;
+			last_alpha = skip ? last_alpha : alpha;
 
 			// Account for fact that alpha also influences how much of
 			// the background color is added if nothing left to blend
 			float bg_dot_dpixel = 0;
+			#pragma unroll // speedup
 			for (int i = 0; i < C; i++)
 				bg_dot_dpixel += bg_color[i] * dL_dpixel[i];
 			dL_dalpha += (-T_final / (1.f - alpha)) * bg_dot_dpixel;
@@ -779,17 +876,64 @@ renderCUDA(
 			const float dG_ddelx = -gdx * con_o.x - gdy * con_o.y;
 			const float dG_ddely = -gdy * con_o.z - gdx * con_o.y;
 
-			// Update gradients w.r.t. 2D mean position of the Gaussian
-			atomicAdd(&dL_dmean2D[global_id].x, dL_dG * dG_ddelx * ddelx_dx);
-			atomicAdd(&dL_dmean2D[global_id].y, dL_dG * dG_ddely * ddely_dy);
+			// too slow
+			// // Update gradients w.r.t. 2D mean position of the Gaussian
+			// atomicAdd(&dL_dmean2D[global_id].x, dL_dG * dG_ddelx * ddelx_dx);
+			// atomicAdd(&dL_dmean2D[global_id].y, dL_dG * dG_ddely * ddely_dy);
 
-			// Update gradients w.r.t. 2D covariance (2x2 matrix, symmetric)
-			atomicAdd(&dL_dconic2D[global_id].x, -0.5f * gdx * d.x * dL_dG);
-			atomicAdd(&dL_dconic2D[global_id].y, -0.5f * gdx * d.y * dL_dG);
-			atomicAdd(&dL_dconic2D[global_id].w, -0.5f * gdy * d.y * dL_dG);
+			// // Update gradients w.r.t. 2D covariance (2x2 matrix, symmetric)
+			// atomicAdd(&dL_dconic2D[global_id].x, -0.5f * gdx * d.x * dL_dG);
+			// atomicAdd(&dL_dconic2D[global_id].y, -0.5f * gdx * d.y * dL_dG);
+			// atomicAdd(&dL_dconic2D[global_id].w, -0.5f * gdy * d.y * dL_dG);
 
-			// Update gradients w.r.t. opacity of the Gaussian
-			atomicAdd(&(dL_dopacity[global_id]), G * dL_dalpha);
+			// // Update gradients w.r.t. opacity of the Gaussian
+			// atomicAdd(&(dL_dopacity[global_id]), G * dL_dalpha);
+
+			// speedup
+			dL_dmean2D_shared[tid].x = skip ? 0.f : dL_dG * dG_ddelx * ddelx_dx;
+			dL_dmean2D_shared[tid].y = skip ? 0.f : dL_dG * dG_ddely * ddely_dy;
+			dL_dconic2D_shared[tid].x = skip ? 0.f : -0.5f * gdx * d.x * dL_dG;
+			dL_dconic2D_shared[tid].y = skip ? 0.f : -0.5f * gdx * d.y * dL_dG;
+			dL_dconic2D_shared[tid].w = skip ? 0.f : -0.5f * gdy * d.y * dL_dG;
+			dL_dopacity_shared[tid] = skip ? 0.f : G * dL_dalpha;
+
+			render_cuda_reduce_sum(block, 
+				dL_dmean2D_shared,
+				dL_dconic2D_shared,
+				dL_dopacity_shared,
+				dL_dcolors_shared, 
+				dL_ddepths_shared
+			);	
+			// if(flag_semantic)
+			// 	render_cuda_reduce_sum_1d(block, dL_dsemantic_feature_shared);
+
+			// only atomicAdd once
+			if (tid == 0) {
+				float2 dL_dmean2D_acc = dL_dmean2D_shared[0];
+				float4 dL_dconic2D_acc = dL_dconic2D_shared[0];
+				float dL_dopacity_acc = dL_dopacity_shared[0];
+				float3 dL_dcolors_acc = dL_dcolors_shared[0];
+				float dL_ddepths_acc = dL_ddepths_shared[0];
+
+				atomicAdd(&dL_dmean2D[global_id].x, dL_dmean2D_acc.x);
+				atomicAdd(&dL_dmean2D[global_id].y, dL_dmean2D_acc.y);
+				atomicAdd(&dL_dconic2D[global_id].x, dL_dconic2D_acc.x);
+				atomicAdd(&dL_dconic2D[global_id].y, dL_dconic2D_acc.y);
+				atomicAdd(&dL_dconic2D[global_id].w, dL_dconic2D_acc.w);
+				atomicAdd(&dL_dopacity[global_id], dL_dopacity_acc);
+				atomicAdd(&dL_dcolors[global_id * C + 0], dL_dcolors_acc.x);
+				atomicAdd(&dL_dcolors[global_id * C + 1], dL_dcolors_acc.y);
+				atomicAdd(&dL_dcolors[global_id * C + 2], dL_dcolors_acc.z);
+				atomicAdd(&dL_ddepths[global_id], dL_ddepths_acc);
+
+				// if(flag_semantic){
+				// 	#pragma unroll // speedup
+				// 	for (int ch = 0; ch < NUM_SEMANTIC_CHANNELS; ch++) 
+				// 	{
+				// 		atomicAdd(&(dL_dsemantic_feature[global_id * NUM_SEMANTIC_CHANNELS + ch]), dL_dsemantic_feature_shared[ch]); // 0 * NUM_SEMANTIC_CHANNELS + ch
+				// 	}
+				// }
+			}
 		}
 	}
 }
@@ -892,7 +1036,7 @@ void BACKWARD::render(
 	float* dL_dcolors,
 	float* dL_ddepths, 					// [ADD SLAM]
 	float* dL_dsemantic_feature, 		// [ADD Feat]
-	float* collected_semantic_feature,	// [ADD Feat]
+	//float* collected_semantic_feature,	// [ADD Feat]
 	bool flag_semantic 					// [ADD Feat]
 	)
 {
@@ -917,7 +1061,7 @@ void BACKWARD::render(
 		dL_dcolors,
 		dL_ddepths,					// [ADD SLAM]
 		dL_dsemantic_feature,		// [ADD Feat]
-		collected_semantic_feature, // [ADD Feat]
+		// collected_semantic_feature, // [ADD Feat]
 		flag_semantic				// [ADD Feat]
 		);
 }

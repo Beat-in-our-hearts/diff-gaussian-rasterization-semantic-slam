@@ -365,6 +365,7 @@ renderCUDA(
 			}
 
 			// Eq. (3) from 3D Gaussian splatting paper.
+			#pragma unroll
 			for (int ch = 0; ch < CHANNELS; ch++)
 				C[ch] += features[collected_id[j] * CHANNELS + ch] * alpha * T;
 
@@ -373,6 +374,7 @@ renderCUDA(
 			D += depths[collected_id[j]] * alpha * T;
 
 			if(flag_semantic){
+				#pragma unroll
 				for (int ch = 0; ch < NUM_SEMANTIC_CHANNELS; ch++){
 					SF[ch] += semantics[collected_id[j] * NUM_SEMANTIC_CHANNELS + ch] * alpha * T; 
 				}
@@ -396,12 +398,14 @@ renderCUDA(
 	{
 		final_T[pix_id] = T;
 		n_contrib[pix_id] = last_contributor;
+		#pragma unroll
 		for (int ch = 0; ch < CHANNELS; ch++) // RGB Image
 			out_color[ch * H * W + pix_id] = C[ch] + T * bg_color[ch];
 		// Wirte out depth, semantic feature, out_opacity
 		out_depth[pix_id] = D; // do not add bg_color
 		out_opacity[pix_id] = 1 - T;
 		if(flag_semantic){
+			#pragma unroll
 			for (int ch = 0; ch < NUM_SEMANTIC_CHANNELS; ch++)                 
 				out_feature_map[ch * H * W + pix_id] = SF[ch] + T * bg_color[ch]; // NOTE: bg_color to draw in screen
 		}
