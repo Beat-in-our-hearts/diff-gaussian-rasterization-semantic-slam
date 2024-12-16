@@ -258,7 +258,7 @@ __global__ void preprocessCUDA(int P, int D, int M,
 // Main rasterization method. Collaboratively works on one tile per
 // block, each thread treats one pixel. Alternates between fetching 
 // and rasterizing data.
-template <uint32_t CHANNELS>
+template <uint32_t CHANNELS, uint32_t CHANNELS_SEMANTIC_FEATURE>
 __global__ void __launch_bounds__(BLOCK_X * BLOCK_Y)
 renderCUDA(
 	const uint2* __restrict__ ranges,
@@ -313,7 +313,7 @@ renderCUDA(
 	
 	// NOTE: add deptch and semantic feature
 	float D = 0.0f;							
-	float SF[NUM_SEMANTIC_CHANNELS] = { 0 };
+	float SF[CHANNELS_SEMANTIC_FEATURE] = { 0 };
 
 	// Iterate over batches until all done or range is complete
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
@@ -375,8 +375,8 @@ renderCUDA(
 
 			if(flag_semantic){
 				#pragma unroll
-				for (int ch = 0; ch < NUM_SEMANTIC_CHANNELS; ch++){
-					SF[ch] += semantics[collected_id[j] * NUM_SEMANTIC_CHANNELS + ch] * alpha * T; 
+				for (int ch = 0; ch < CHANNELS_SEMANTIC_FEATURE; ch++){
+					SF[ch] += semantics[collected_id[j] * CHANNELS_SEMANTIC_FEATURE + ch] * alpha * T; 
 				}
 			}
 
@@ -406,8 +406,8 @@ renderCUDA(
 		out_opacity[pix_id] = 1 - T;
 		if(flag_semantic){
 			#pragma unroll
-			for (int ch = 0; ch < NUM_SEMANTIC_CHANNELS; ch++)                 
-				out_feature_map[ch * H * W + pix_id] = SF[ch] + T * bg_color[ch]; // NOTE: bg_color to draw in screen
+			for (int ch = 0; ch < CHANNELS_SEMANTIC_FEATURE; ch++)                 
+				out_feature_map[ch * H * W + pix_id] = SF[ch]; // [FIX]
 		}
 	}
 }
@@ -433,7 +433,7 @@ void FORWARD::render(
 	bool flag_semantic					// [ADD Feat]
 	)
 {
-	renderCUDA<NUM_CHANNELS> << <grid, block >> > (
+	renderCUDA<NUM_CHANNELS, NUM_SEMANTIC_CHANNELS> << <grid, block >> > (
 		ranges,
 		point_list,
 		W, H,

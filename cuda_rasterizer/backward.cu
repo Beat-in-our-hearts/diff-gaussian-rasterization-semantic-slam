@@ -623,7 +623,7 @@ __device__ void render_cuda_reduce_sum(group_t g, Lists... lists) {
 // }
 
 // Backward version of the rendering procedure.
-template <uint32_t C>
+template <uint32_t C, uint32_t NUM_F>
 __global__ void __launch_bounds__(BLOCK_X * BLOCK_Y)
 renderCUDA(
 	const uint2* __restrict__ ranges,
@@ -699,8 +699,8 @@ renderCUDA(
 	float accum_rec[C] = { 0 };
 	float dL_dpixel[C];
 	// add semantic feature and depth
-	float accum_semantic_feature_rec[NUM_SEMANTIC_CHANNELS] = { 0 }; 
-	float dL_dpix_feature[NUM_SEMANTIC_CHANNELS];
+	float accum_semantic_feature_rec[NUM_F] = { 0 }; 
+	float dL_dpix_feature[NUM_F];
 	
 	float accum_depth_rec = 0;
 	float dL_dpix_depth;
@@ -715,13 +715,13 @@ renderCUDA(
 
 		if(flag_semantic){
 			#pragma unroll // speedup
-			for (int i = 0; i < NUM_SEMANTIC_CHANNELS; i++) 
+			for (int i = 0; i < NUM_F; i++) 
 				dL_dpix_feature[i] = dL_dpixels_feature[i * H * W + pix_id];
 		}
 	}
 	float last_alpha = 0;
 	float last_color[C] = { 0 };
-	float last_semantic_feature[NUM_SEMANTIC_CHANNELS] = { 0 };
+	float last_semantic_feature[NUM_F] = { 0 };
 	float last_depth = 0; 
 
 	// Gradient of pixel coordinate w.r.t. normalized 
@@ -832,7 +832,7 @@ renderCUDA(
 
 			if(flag_semantic){
 				#pragma unroll // speedup
-				for (int ch = 0; ch < NUM_SEMANTIC_CHANNELS; ch++) 
+				for (int ch = 0; ch < NUM_F; ch++) 
 				{
 					// const float f = collected_semantic_feature[ch * BLOCK_SIZE + j];
 					// // Update last semantic feature (to be used in the next iteration)
@@ -849,7 +849,7 @@ renderCUDA(
 					// many that were affected by this Gaussian.
 
 					if(!skip)
-						atomicAdd(&(dL_dsemantic_feature[global_id * NUM_SEMANTIC_CHANNELS + ch]), dchannel_dsemantic_feature * dL_dfeaturechannel); 
+						atomicAdd(&(dL_dsemantic_feature[global_id * NUM_F + ch]), dchannel_dsemantic_feature * dL_dfeaturechannel); 
 					
 					// dL_dsemantic_feature_shared[tid * NUM_SEMANTIC_CHANNELS + ch] = skip ? 0.f : dchannel_dsemantic_feature * dL_dfeaturechannel;
 				}
@@ -1040,7 +1040,7 @@ void BACKWARD::render(
 	bool flag_semantic 					// [ADD Feat]
 	)
 {
-	renderCUDA<NUM_CHANNELS> << <grid, block >> >(
+	renderCUDA<NUM_CHANNELS, NUM_CHANNELS_language_feature> << <grid, block >> >(
 		ranges,
 		point_list,
 		W, H,
