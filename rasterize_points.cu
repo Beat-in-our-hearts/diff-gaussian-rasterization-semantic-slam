@@ -72,12 +72,13 @@ RasterizeGaussiansCUDA(
   torch::Tensor radii = torch::full({P}, 0, means3D.options().dtype(torch::kInt32));
 
   // ADD Feat SLAM
+  torch::Tensor out_feature_map;
   torch::Tensor out_depth = torch::full({1, H, W}, 0.0, float_opts);
   if(flag_semantic){ // Render semantic feature map
-	torch::Tensor out_feature_map = torch::full({NUM_SEMANTIC_CHANNELS, H, W}, 0.0, float_opts);
+	out_feature_map = torch::full({NUM_SEMANTIC_CHANNELS, H, W}, 0.0, float_opts);
   }
   else{ // Empty feature map
-	torch::Tensor out_feature_map = torch::full({1}, 0.0, float_opts);
+	out_feature_map = torch::full({1}, 0.0, float_opts);
   }
   torch::Tensor n_touched = torch::full({P}, 0, means3D.options().dtype(torch::kInt32));
   torch::Tensor out_opaticy = torch::full({1, H, W}, 0.0, float_opts);
@@ -184,11 +185,12 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
   torch::Tensor dL_drotations = torch::zeros({P, 4}, means3D.options());
   
   // ADD SLAM Feat
+  torch::Tensor dL_dsemantic_feature;
   if(flag_semantic){
-  	torch::Tensor dL_dsemantic_feature = torch::zeros({P, semantic_feature.size(1), NUM_SEMANTIC_CHANNELS}, means3D.options());
+  	dL_dsemantic_feature = torch::zeros({P, semantic_feature.size(1), NUM_SEMANTIC_CHANNELS}, means3D.options());
   }
   else{
-	torch::Tensor dL_dsemantic_feature = torch::zeros({1}, means3D.options());
+	dL_dsemantic_feature = torch::zeros({1}, means3D.options());
   }
   torch::Tensor dL_ddepths = torch::zeros({P, 1}, means3D.options());
   torch::Tensor dL_dtau = torch::zeros({P,6}, means3D.options());
