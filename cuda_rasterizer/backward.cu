@@ -1040,7 +1040,7 @@ void BACKWARD::render(
 	bool flag_semantic 					// [ADD Feat]
 	)
 {
-	renderCUDA<NUM_CHANNELS, NUM_CHANNELS_language_feature> << <grid, block >> >(
+	renderCUDA<NUM_CHANNELS, NUM_SEMANTIC_CHANNELS> << <grid, block >> >(
 		ranges,
 		point_list,
 		W, H,
