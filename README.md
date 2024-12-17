@@ -13,6 +13,14 @@ for camera pos:
 # Gradient for Depth image and feature map
 
 
+# Semantic Render Flag
+
+| 渲染性能 | DIM | 0 | 8 | 32 | 64 | 128 | 256 |
+|----------|-----|---|---|----|----|-----|-----|
+| 追踪渲染 | 1794 | 1758 | 1750 | 1731 | 1722 | 1634 |
+| 建图渲染 | 1786 | 1475 | 846 | 457 | 149 | |
+
+
 
 <section class="section" id="BibTeX">
   <div class="container is-max-desktop content">
