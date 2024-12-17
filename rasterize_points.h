@@ -73,3 +73,5 @@ torch::Tensor markVisible(
 		torch::Tensor& means3D,
 		torch::Tensor& viewmatrix,
 		torch::Tensor& projmatrix);
+
+int GetSemanticChannels();

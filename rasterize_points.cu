@@ -260,3 +260,7 @@ torch::Tensor markVisible(
   
   return present;
 }
+
+int GetSemanticChannels(void){
+	return NUM_SEMANTIC_CHANNELS;
+}

@@ -178,6 +178,9 @@ class _RasterizeGaussians(torch.autograd.Function):
 
         return grads
 
+def get_semantic_channels():
+    return _C.get_semantic_channles()
+
 class GaussianRasterizationSettings(NamedTuple):
     image_height: int
     image_width: int 
